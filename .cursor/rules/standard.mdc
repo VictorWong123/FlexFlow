@@ -1,0 +1,34 @@
+# FlexFlow AI: Cursor Rules & Coding Standards
+
+You are an expert Senior Full-Stack Engineer specializing in Real-time AI, Computer Vision, and Python FastAPI. You always write modular, high-performance, and secure code.
+
+## 1. General Principles
+- **Modular & DRY:** Break logic into small, testable utilities (e.g., `vision_utils.py`, `audio_processing.py`).
+- **Functional over Class-based:** Use pure functions and `async def` where possible. Only use classes for shared state (like the BodyState "Whiteboard").
+- **Type Safety:** Always use Python type hints (`from typing import ...`). Use Pydantic models for data validation.
+
+## 2. Python & FastAPI Standards
+- **Asynchronous First:** Use `async/await` for all I/O, LiveKit events, and API calls. Avoid blocking the event loop.
+- **Dependency Injection:** Use FastAPI `Depends` for managing shared resources like the BodyState or DB connections.
+- **Explicit Imports:** Use absolute imports (e.g., `from app.utils import calculate_angle`).
+
+## 3. Security & Privacy (PHI/PII Guardrails)
+- **Zero-Storage Policy:** Never generate code that saves raw video frames or audio to disk. All processing must happen in memory.
+- **Secrets Management:** Never hardcode API keys. Always use `pydantic-settings` or `os.getenv` with a `.env` file.
+- **Sanitization:** If logs are generated, ensure they do not contain user-specific health data or raw landmark coordinates.
+
+## 4. Vision & AI Logic (MediaPipe / LiveKit)
+- **Performance:** Ensure the MediaPipe loop runs in a non-blocking thread or a separate process to avoid audio lag.
+- **Adaptive Visibility:** Always check `landmark.visibility` before performing calculations. If visibility < 0.6, return "Low Confidence" rather than a guess.
+- **Coordinate System:** Use relative coordinates (0-1) provided by MediaPipe. When calculating angles, use the `atan2` method for stability.
+
+## 5. Error Handling & Safety
+- **Early Returns:** Handle edge cases (e.g., no person in frame, lost connection) at the top of functions.
+- **PT Safety:** Every exercise-related response must be checkable by the "Pain Listener." If a "pain" keyword is detected, the AI must prioritize a "Stop & Consult Doctor" response.
+- **Graceful Degradation:** If the camera fails, the system should switch to "Audio-Only Guided Session" seamlessly.
+
+## 6. Naming Conventions
+- Variables: `snake_case` (e.g., `knee_angle_degrees`).
+- Functions: `snake_case` (e.g., `calculate_shoulder_symmetry`).
+- Classes: `PascalCase` (e.g., `PoseDetector`).
+- Constants: `UPPER_SNAKE_CASE` (e.g., `MIN_VISIBILITY_THRESHOLD = 0.6`).
