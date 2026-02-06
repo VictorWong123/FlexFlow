@@ -24,3 +24,9 @@ build/
 *.webm
 *.wav
 *.mp3
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/build/
+frontend/.env*.local

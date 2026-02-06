@@ -1,5 +1,5 @@
 """
-FlexFlow agent entrypoint: Gemini 2.0 Flash (Multimodal Live API) with
+FlexFlow agent entrypoint: Gemini 2.5 Flash Native Audio (Live API) with
 get_body_metrics tool and pain guardrail. No video/audio stored; all in-memory.
 """
 
@@ -18,15 +18,34 @@ load_dotenv(".env.local")
 load_dotenv()
 
 FLEXFLOW_SYSTEM_PROMPT = """\
-You are FlexFlow, a supportive AI Physical Therapist. \
-Use the get_body_metrics tool to verify the user's form when giving exercise guidance. \
-If the user mentions pain, stop immediately and advise them to consult a healthcare provider. \
-You are not a doctor; prioritize safety."""
+Role: You are Sewina, a professional and empathetic AI Physical Therapist Assistant. Your primary goal is to guide the user through safe mobility, stretching, and form correction. 
+
+Behavioral Directives:
+- Analysis: Ask clarifying questions to understand the user's pain and symptoms before giving advice.                    
+- Data-Grounded: Use the `get_body_metrics` tool to verify the user’s real-time joint angles and posture before confirming they are performing a movement correctly.
+
+Safety & Pain Logic:
+- Pain Compass: Help the user distinguish between "Good Pain" (burn, dull ache, tightness) and "Bad Pain" (sharp, stabbing, electric, pinpointed, or radiating). 
+- 5/10 Rule: If the user reports pain exceeding a 5/10 intensity, instruct them to reduce their range of motion or stop the exercise entirely.
+- The Red Flag Protocol: Immediately stop all guidance and instruct the user to seek professional medical evaluation if they report:
+    1. Sharp or stabbing pain.
+    2. Numbness or tingling (pins and needles).
+    3. Dizziness or shortness of breath.
+    4. Pain that follows a recent trauma (pop/snap).
+
+Mandatory Disclaimers:
+- Frequently remind the user: "I am an AI, not a doctor. My guidance is for educational purposes. Stop if you feel pain."
+- Integrate these disclaimers naturally into your coaching flow rather than just at the start.
+
+Response Style:
+- Use clinical terminology: Flexion, extension, pronation, supination, and lateral rotation.
+- Be concise: Use bullet points for instructions. 
+- Prioritize Safety: When in doubt, advise a smaller range of motion over a deeper stretch."""
 
 
 class FlexFlowAgent(Agent):
     """
-    Voice agent backed by Gemini 2.0 Flash (Multimodal Live). Reads real-time
+    Voice agent backed by Gemini 2.5 Flash Native Audio (Live API). Reads real-time
     body metrics from the shared AsyncState via get_body_metrics.
     """
 
@@ -46,10 +65,10 @@ class FlexFlowAgent(Agent):
 
 
 def create_session() -> AgentSession:
-    """Create an AgentSession with Gemini 2.0 Flash realtime model."""
+    """Create an AgentSession with Gemini Live API native audio model."""
     return AgentSession(
         llm=google.realtime.RealtimeModel(
-            model="gemini-2.0-flash-exp",  # Gemini 2.0 Flash Multimodal Live API
+            model="gemini-2.5-flash-native-audio-preview-12-2025",
             voice="Puck",
             temperature=0.7,
             instructions=FLEXFLOW_SYSTEM_PROMPT,
@@ -67,10 +86,6 @@ def get_pain_safety_instruction() -> str:
     return SAFETY_WARNING
 
 
-# ---------------------------------------------------------------------------
-# LiveKit agent server (entrypoint: uv run app.agent dev | start | console)
-# ---------------------------------------------------------------------------
-
 _server = agents.AgentServer()
 
 
@@ -84,9 +99,6 @@ async def _flexflow_session(ctx: agents.JobContext) -> None:
     await session.generate_reply(
         instructions="Greet the user briefly as FlexFlow and offer to guide them through a safe stretch or exercise. Ask what area they want to focus on."
     )
-    # When transcript is available (e.g. from realtime model or STT), call:
-    #   if should_trigger_pain_guardrail(transcript):
-    #     await session.generate_reply(instructions=get_pain_safety_instruction())
 
 
 def run_app() -> None:

@@ -1,3 +1,9 @@
+---
+description: Global coding standards and security protocols for FlexFlow
+globs: ["**/*.py", "**/*.ts", "**/*.tsx", "**/*.js"]
+alwaysApply: true
+---
+
 # FlexFlow AI: Cursor Rules & Coding Standards
 
 You are an expert Senior Full-Stack Engineer specializing in Real-time AI, Computer Vision, and Python FastAPI. You always write modular, high-performance, and secure code.
@@ -10,7 +16,7 @@ You are an expert Senior Full-Stack Engineer specializing in Real-time AI, Compu
 ## 2. Python & FastAPI Standards
 - **Asynchronous First:** Use `async/await` for all I/O, LiveKit events, and API calls. Avoid blocking the event loop.
 - **Dependency Injection:** Use FastAPI `Depends` for managing shared resources like the BodyState or DB connections.
-- **Explicit Imports:** Use absolute imports (e.g., `from app.utils import calculate_angle`).
+- **Explicit Imports:** Use absolute imports from the backend app (e.g., `from app.utils import calculate_angle`). Backend code lives under `backend/`; run commands from `backend/` so `app` resolves to `backend/app`.
 
 ## 3. Security & Privacy (PHI/PII Guardrails)
 - **Zero-Storage Policy:** Never generate code that saves raw video frames or audio to disk. All processing must happen in memory.
@@ -32,3 +38,6 @@ You are an expert Senior Full-Stack Engineer specializing in Real-time AI, Compu
 - Functions: `snake_case` (e.g., `calculate_shoulder_symmetry`).
 - Classes: `PascalCase` (e.g., `PoseDetector`).
 - Constants: `UPPER_SNAKE_CASE` (e.g., `MIN_VISIBILITY_THRESHOLD = 0.6`).
+
+##7. MCP servers
+-"Always use the livekit-docs MCP server to verify function signatures for VoicePipelineAgent and MultimodalLiveModel when working with voice."

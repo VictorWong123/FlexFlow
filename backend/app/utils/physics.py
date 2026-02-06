@@ -67,8 +67,7 @@ def neck_tilt_degrees(
     mid_x = (p_ls[0] + p_rs[0]) / 2
     mid_y = (p_ls[1] + p_rs[1]) / 2
     shoulder_mid = (mid_x, mid_y)
-    # Vertical "up" from shoulder mid (y decreases up in image coords)
-    up = (mid_x, mid_y - 0.1)
+    up = (mid_x, mid_y - 0.1)  # y decreases up in image coords
     return angle_degrees_from_vectors(up, shoulder_mid, p_nose)
 
 
