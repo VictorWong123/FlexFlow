@@ -53,6 +53,7 @@ export default function VideoSession({ onDisconnect }: VideoSessionProps) {
   const audioRef = useRef<HTMLAudioElement>(null)
   const roomRef = useRef<Room | null>(null)
   const transcriptEndRef = useRef<HTMLDivElement>(null)
+  const endingRef = useRef(false)
 
   useEffect(() => {
     if (!isConnected) return
@@ -101,7 +102,7 @@ export default function VideoSession({ onDisconnect }: VideoSessionProps) {
         })
 
         room.on(RoomEvent.Disconnected, () => {
-          if (!cancelled) {
+          if (!cancelled && !endingRef.current) {
             setIsConnected(false)
             onDisconnect()
           }
@@ -213,12 +214,19 @@ export default function VideoSession({ onDisconnect }: VideoSessionProps) {
   }, [isVideoEnabled])
 
   const endSession = useCallback(async () => {
-    if (roomRef.current) roomRef.current.disconnect()
+    endingRef.current = true
     setIsSaving(true)
 
+    // Capture transcript before disconnecting
     const finalTranscript: TranscriptMessage[] = transcript
       .filter((t) => t.isFinal && t.text.trim())
       .map((t) => ({ speaker: t.speaker, text: t.text }))
+
+    // Disconnect the room (endingRef prevents unmount)
+    if (roomRef.current) {
+      roomRef.current.disconnect()
+      roomRef.current = null
+    }
 
     try {
       const res = await fetch('/api/save-session', {
@@ -226,14 +234,19 @@ export default function VideoSession({ onDisconnect }: VideoSessionProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transcript: finalTranscript, duration: elapsed }),
       })
+
       if (res.ok) {
         router.push('/dashboard')
         return
       }
-    } catch {
-      console.error('Failed to save session')
+
+      const errData = await res.json().catch(() => ({}))
+      console.error('Save session failed:', res.status, errData)
+    } catch (err) {
+      console.error('Failed to save session:', err)
     }
 
+    endingRef.current = false
     setIsSaving(false)
     onDisconnect()
   }, [transcript, elapsed, onDisconnect, router])

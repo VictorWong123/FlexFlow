@@ -32,13 +32,13 @@ export default function DashboardClient({ sessions, userEmail }: DashboardClient
   return (
     <div className="min-h-screen bg-slate-950">
       <header className="h-20 px-8 flex items-center justify-between border-b border-slate-800">
-        <h1 className="text-2xl font-bold text-slate-50">
+        <button onClick={() => router.push('/')} className="text-2xl font-bold text-slate-50 hover:opacity-80 transition">
           Flex<span className="text-emerald-400">Flow</span>
-        </h1>
+        </button>
         <div className="flex items-center gap-4">
           <button
-            onClick={() => router.push('/')}
-            className="px-4 py-2 bg-emerald-500 text-slate-950 rounded-xl text-sm font-semibold hover:bg-emerald-400 transition flex items-center gap-2"
+            onClick={() => router.push('/?start=true')}
+            className="px-4 py-2 bg-emerald-500 text-white rounded-xl text-sm font-semibold hover:bg-emerald-400 transition flex items-center gap-2"
           >
             <Play className="w-4 h-4" />
             New Session
@@ -61,8 +61,8 @@ export default function DashboardClient({ sessions, userEmail }: DashboardClient
           <div className="text-center py-20">
             <p className="text-slate-500 text-lg mb-4">No sessions yet.</p>
             <button
-              onClick={() => router.push('/')}
-              className="px-6 py-3 bg-emerald-500 text-slate-950 rounded-2xl font-semibold hover:bg-emerald-400 transition"
+              onClick={() => router.push('/?start=true')}
+              className="px-6 py-3 bg-emerald-500 text-white rounded-2xl font-semibold hover:bg-emerald-400 transition"
             >
               Start Your First Session
             </button>

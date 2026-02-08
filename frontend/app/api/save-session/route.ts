@@ -32,6 +32,12 @@ export async function POST(request: Request) {
     .map((m) => `${m.speaker === 'agent' ? 'Therapist' : 'Patient'}: ${m.text}`)
     .join('\n')
 
+  console.log(`[save-session] Transcript lines: ${transcript.length}, text length: ${conversationText.length}`)
+
+  if (conversationText.trim().length === 0) {
+    console.warn('[save-session] Empty transcript — skipping Gemini, using fallback')
+  }
+
   let summaryData: {
     summary_text: string
     pain_points: string[]
@@ -45,7 +51,7 @@ export async function POST(request: Request) {
 
     const genAI = new GoogleGenerativeAI(apiKey)
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash',
       generationConfig: {
         responseMimeType: 'application/json',
       },
