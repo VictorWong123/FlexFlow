@@ -1,18 +1,23 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { ExternalLink, LogOut, Play } from 'lucide-react'
+import { LogOut, Play } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import type { SessionSummaryRow } from '@/utils/types'
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr)
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 function formatDuration(seconds: number): string {
   const mins = Math.round(seconds / 60)
   return mins <= 1 ? '1 min' : `${mins} mins`
+}
+
+function truncate(text: string, max: number): string {
+  if (text.length <= max) return text
+  return text.slice(0, max).trimEnd() + '...'
 }
 
 interface DashboardClientProps {
@@ -68,66 +73,54 @@ export default function DashboardClient({ sessions, userEmail }: DashboardClient
             </button>
           </div>
         ) : (
-          <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
             {sessions.map((session) => (
-              <div
+              <button
                 key={session.id}
-                className="bg-slate-900 rounded-2xl border border-slate-800 p-6 flex flex-col gap-4"
+                onClick={() => router.push(`/dashboard/${session.id}`)}
+                className="bg-slate-900 rounded-2xl border border-slate-800 p-5 flex flex-col gap-3 text-left hover:border-slate-700 hover:bg-slate-900/80 transition group"
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400 text-sm">
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-slate-400 text-xs">
                     {formatDate(session.created_at)}
                   </span>
-                  <span className="text-slate-400 text-sm">
+                  <span className="text-slate-500 text-xs">
                     {formatDuration(session.duration_seconds)}
                   </span>
                 </div>
 
-                <p className="text-slate-50 text-sm leading-relaxed">
-                  {session.summary_text}
+                <p className="text-slate-200 text-sm leading-relaxed">
+                  {truncate(session.summary_text, 100)}
                 </p>
 
-                <div className="flex flex-wrap gap-2">
-                  {session.pain_points.map((p, i) => (
+                <div className="flex flex-wrap gap-1.5">
+                  {session.pain_points.slice(0, 2).map((p, i) => (
                     <span
                       key={`pain-${i}`}
-                      className="text-[11px] px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-500 border border-rose-500/20"
+                      className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-500 border border-rose-500/20"
                     >
                       {p}
                     </span>
                   ))}
-                  {session.stretches_performed.map((s, i) => (
+                  {session.stretches_performed.slice(0, 2).map((s, i) => (
                     <span
                       key={`stretch-${i}`}
-                      className="text-[11px] px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                      className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                     >
                       {s}
                     </span>
                   ))}
+                  {(session.pain_points.length + session.stretches_performed.length) > 4 && (
+                    <span className="text-[10px] px-2 py-0.5 text-slate-500">
+                      +{session.pain_points.length + session.stretches_performed.length - 4} more
+                    </span>
+                  )}
                 </div>
 
-                {session.youtube_links.length > 0 && (
-                  <div className="border-t border-slate-800 pt-3 mt-1">
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                      Recommended Resources
-                    </p>
-                    <div className="flex flex-col gap-1.5">
-                      {session.youtube_links.map((link, i) => (
-                        <a
-                          key={i}
-                          href={link.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-emerald-400 hover:text-emerald-300 transition flex items-center gap-1.5"
-                        >
-                          <ExternalLink className="w-3 h-3 shrink-0" />
-                          {link.label}
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+                <span className="text-xs text-emerald-400 group-hover:text-emerald-300 transition mt-auto">
+                  View details
+                </span>
+              </button>
             ))}
           </div>
         )}
