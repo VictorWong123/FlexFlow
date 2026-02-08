@@ -1,0 +1,62 @@
+{
+    "app": {
+        "name": "FlexFlow",
+        "theme": "dark",
+        "fontFamily": "Inter, sans-serif"
+    },
+    "colors": {
+        "background": {
+            "main": "bg-slate-950",
+            "surface": "bg-slate-900",
+            "surface_highlight": "bg-slate-800"
+        },
+        "text": {
+            "primary": "text-slate-50",
+            "secondary": "text-slate-400",
+            "accent": "text-emerald-400"
+        },
+        "status": {
+            "success": "emerald-500",
+            "warning": "amber-500",
+            "error": "rose-500",
+            "info": "sky-500"
+        },
+        "ui": {
+            "border": "border-slate-800",
+            "divider": "border-slate-800"
+        }
+    },
+    "layout": {
+        "grid": "grid grid-cols-12 gap-6 h-[calc(100vh-80px)] p-6",
+        "left_pane": "col-span-8 relative rounded-3xl overflow-hidden bg-slate-900 border border-slate-800 shadow-2xl",
+        "right_pane": "col-span-4 flex flex-col gap-4"
+    },
+    "components": {
+        "header": {
+            "height": "h-20",
+            "padding": "px-8",
+            "elements": [
+                "Logo (Text)",
+                "Timer (Center)",
+                "End Session Button (Right)"
+            ]
+        },
+        "video_stage": {
+            "overlay": "absolute inset-0 pointer-events-none",
+            "status_chip": "absolute top-6 left-6 px-4 py-2 bg-slate-800/90 backdrop-blur rounded-full border border-slate-700 text-sm font-medium flex items-center gap-2"
+        },
+        "metrics_card": {
+            "style": "bg-slate-900 rounded-2xl p-6 border border-slate-800",
+            "gauge_type": "Semi-Circle Arc"
+        },
+        "dynamic_exercise_card": {
+            "style": "bg-slate-800 rounded-2xl overflow-hidden border border-slate-700 shadow-lg transition-all duration-300",
+            "image_aspect": "aspect-video object-cover w-full"
+        },
+        "push_to_talk": {
+            "wrapper": "mt-auto flex justify-center pb-4",
+            "button": "w-20 h-20 rounded-full bg-emerald-500/10 border-2 border-emerald-500 flex items-center justify-center transition-all hover:scale-105 active:scale-95",
+            "icon_size": "w-8 h-8 text-emerald-500"
+        }
+    }
+}

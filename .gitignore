@@ -19,6 +19,9 @@ build/
 *.swp
 *.swo
 
+# MediaPipe model files (binary, downloaded at setup)
+*.task
+
 # No video/audio storage (project policy)
 *.mp4
 *.webm

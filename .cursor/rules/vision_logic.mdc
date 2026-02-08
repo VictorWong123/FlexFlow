@@ -1,0 +1,26 @@
+---
+description: Standards for Computer Vision and MediaPipe integration in FlexFlow
+globs: ["app/vision.py", "app/utils/physics.py"]
+alwaysApply: true
+---
+
+# Vision & Real-Time Processing Rules
+
+## 1. Performance & Concurrency
+- **Non-Blocking Vision:** NEVER run `mediapipe.process()` directly in an `async def` function without `run_in_executor`. It is a CPU-bound blocking operation and will stutter the audio.
+- **Frame Dropping:** If processing takes longer than 1/30th of a second, process the *latest* frame and discard the queue. Real-time latency > high framerate.
+
+## 2. Privacy & Security (HIPAA/GDPR)
+- **Zero-Storage:** You are strictly forbidden from writing video frames (`cv2.imwrite`, `file.write`) to disk.
+- **Anonymization:** If logging is required, log only the calculated vector angles (e.g., "Neck: 45°"), NEVER the raw face landmark coordinates.
+
+## 3. Mathematical Coordinate Standards
+- **Normalization:** MediaPipe returns normalized coordinates [0.0, 1.0]. Always verify x/y are within bounds before math.
+- **Pointing Logic:** When calculating "Pointing" distance, use 2D Euclidean distance ($$\sqrt{(x_2-x_1)^2 + (y_2-y_1)^2}$$). 3D `z` coordinates in MediaPipe are relative and less stable for simple interaction detection.
+
+## 4. Error Handling
+- **Missing Landmarks:** Always check `if results.pose_landmarks:` before accessing indices.
+- **Graceful Failure:** If the camera is covered (all visibility < 0.1), set `state.is_upper_body_only = True` (safest default) and clear `pointed_body_part`.
+
+## 5. Testing
+- Create a "Mock Frame" generator in `tests/test_vision.py` that passes synthetic landmarks to verify angle calculations without a camera.

@@ -9,9 +9,10 @@ alwaysApply: true
 You are an expert Senior Full-Stack Engineer specializing in Real-time AI, Computer Vision, and Python FastAPI. You always write modular, high-performance, and secure code.
 
 ## 1. General Principles
-- **Modular & DRY:** Break logic into small, testable utilities (e.g., `vision_utils.py`, `audio_processing.py`).
+- **Modular & DRY:** Break logic into small, testable utilities (e.g., `vision_utils.py`, `audio_processing.py`). Remember the simpler the better.
 - **Functional over Class-based:** Use pure functions and `async def` where possible. Only use classes for shared state (like the BodyState "Whiteboard").
 - **Type Safety:** Always use Python type hints (`from typing import ...`). Use Pydantic models for data validation.
+- Omit any comments that aren't useful and don't add much meaning. 
 
 ## 2. Python & FastAPI Standards
 - **Asynchronous First:** Use `async/await` for all I/O, LiveKit events, and API calls. Avoid blocking the event loop.
