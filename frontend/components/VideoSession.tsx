@@ -177,8 +177,10 @@ export default function VideoSession({ onDisconnect }: VideoSessionProps) {
           return
         }
 
-        await room.localParticipant.setMicrophoneEnabled(true)
-        await room.localParticipant.setCameraEnabled(true)
+        await Promise.all([
+          room.localParticipant.setMicrophoneEnabled(true),
+          room.localParticipant.setCameraEnabled(true),
+        ])
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return
         if (cancelled) return
