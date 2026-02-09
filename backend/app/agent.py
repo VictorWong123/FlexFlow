@@ -278,14 +278,14 @@ async def _flexflow_session(ctx: agents.JobContext) -> None:
         vision_task = asyncio.create_task(mgr.run())
         logger.info("VisionManager started for %s", participant.identity)
 
+    await ctx.connect()
     await session.start(
         room=ctx.room,
         agent=agent,
         room_options=room_io.RoomOptions(video_input=True),
     )
-    await ctx.connect()
     await session.generate_reply(
-        instructions="Greet the user warmly and briefly. Let them know you can see them. Ask what they'd like to work on today."
+        instructions="Say hi briefly and ask what hurts."
     )
 
 

@@ -71,9 +71,7 @@ export default function VideoSession({ onDisconnect }: VideoSessionProps) {
 
     const connect = async () => {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-
-        const tokenResponse = await fetch(`${apiUrl}/api/token`, {
+        const tokenResponse = await fetch('/api/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
