@@ -1,0 +1,9 @@
+[phases.setup]
+nixPkgs = ["python310", "ffmpeg", "libGL", "libxcb", "xorg.libX11", "xorg.libXext", "mesa"]
+aptPkgs = ["libgl1-mesa-glx", "libglib2.0-0"]
+
+[phases.install]
+cmds = ["pip install --upgrade pip", "pip install -r requirements.txt"]
+
+[start]
+cmd = "bash start.sh"
