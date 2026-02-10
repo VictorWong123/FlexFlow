@@ -1,8 +1,0 @@
-[build]
-builder = "nixpacks"
-buildCommand = "pip install --no-cache-dir -r requirements.txt"
-
-[deploy]
-startCommand = "python -m app.agent start"
-healthcheckPath = "/health"
-restartPolicyType = "on_failure"
