@@ -20,7 +20,7 @@ build/
 *.swo
 
 # MediaPipe model files (binary, downloaded at setup)
-*.task
+# *.task  -- unignored so Railway can access pose_landmarker_lite.task
 
 # No video/audio storage (project policy)
 *.mp4
