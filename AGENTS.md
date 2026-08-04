@@ -1,48 +1,71 @@
-# Engineering Instructions
+# FlexFlow Repository Guide
 
-## Workflow
+## What This Repository Does
 
-Keep small, isolated, low-risk, and read-only work single-agent unless delegation is requested. Use `junior_engineer` only when a small implementation task benefits from delegation.
+FlexFlow is a real-time movement coach. LiveKit carries audio, video, and data; MediaPipe extracts pose landmarks; deterministic `SessionCoach` protocols own rep, hold, form, confidence, and safety state; Gemini provides conversational voice coaching from those facts.
 
-For substantial or risky implementation:
+## Project Layout
 
-1. Use `backend_architect` only for cross-file planning, external dependencies, architecture, or unclear contracts.
-2. Use exactly one implementation owner: `senior_swe` by default; `principal_swe` for risky, ambiguous, architectural, cross-system, security-sensitive, difficult, or failed work.
-3. After implementation, use only applicable reviewers: `frontend_reviewer` for user-facing changes, `security_reviewer` for risky or behaviorally significant changes, and `test_engineer` for targeted verification or test-gap analysis.
-4. Return actionable findings to the implementation owner; repeat only needed review or verification.
+- `backend/main.py`: FastAPI health and readiness service.
+- `backend/app/agent.py`: LiveKit worker, Gemini Native Audio, tools, and session lifecycle.
+- `backend/app/vision.py`: MediaPipe frame processing and throttled LiveKit tracking data.
+- `backend/app/coach.py`: Deterministic exercise protocols and state machine.
+- `backend/app/state.py`: Async per-session state shared by vision and Gemini tools.
+- `backend/app/pain_guardrail.py`: Immediate stop/pain detection and fixed safety response.
+- `frontend/app/api/`: Authenticated LiveKit token issuance and session-summary persistence.
+- `frontend/components/VideoSession.tsx`: Live room, tracking UI, transcript, and session controls.
+- `frontend/supabase/migrations/`: RLS, session registry, quotas, and lifecycle RPCs.
 
-Reuse findings. Do not run overlapping broad investigations. Parallelize only independent read-only investigations within the same phase.
+## Architecture Invariants
 
-Use `$fan-out` only for broad codebase discovery with at least three independent questions where parallel search clearly saves time or context.
+- MediaPipe and `SessionCoach` are authoritative for reps, holds, form issues, tracking confidence, and camera view. Do not ask Gemini to infer or remember these from video.
+- Gemini receives audio and bounded structured state through tools. Keep raw video input disabled.
+- Never store raw audio, video, landmarks, or full transcripts. Only validated bounded summaries may be persisted.
+- Pain or stop signals must interrupt coaching, halt deterministic tracking, and require explicit user confirmation before resume.
+- Keep the vision loop non-blocking: MediaPipe runs in its executor, stale frames are dropped, and ordinary tracking/landmark publications stay capped near 10 Hz. Only urgent safety or semantic transitions may bypass throttling.
+- Treat LiveKit data packets, transcripts, model output, and API bodies as untrusted input. Validate and bound them at their boundary.
+- Session rows are server-issued and user-owned. Preserve quotas, atomic claim/complete/release RPCs, RLS, and authenticated ownership checks.
 
-## Documentation Preflight
+## Backend Work
 
-Before implementing a feature that materially depends on an external library, framework, SDK, API, or platform, consult current documentation through Context7.
+- Use Python 3.10+ and existing modules before adding dependencies or abstractions.
+- Keep per-session mutable state in `AsyncState`; do not introduce process-global exercise state.
+- Add or tune movement protocols in `backend/app/coach.py`. Document required camera view and validate thresholds with tests.
+- Do not edit `backend/app/models/pose_landmarker_lite.task` manually.
+- Environment variables belong in `backend/.env.local`; update `.env.example` with placeholders only.
 
-Resolve the correct Context7 library ID, inspect APIs and version-specific constraints, and apply relevant findings before editing code.
+Run backend checks from `backend/`:
 
-Do not send proprietary source code, credentials, personal data, or secrets to Context7. If Context7 lacks coverage, use repository-pinned versions, local documentation, authoritative upstream sources, and existing codebase patterns.
+```bash
+pip install -r requirements-dev.txt
+python -m pytest -q -p no:cacheprovider
+```
 
-Skip documentation lookup when external API behavior is irrelevant or already current in repository documentation.
+## Frontend and Database Work
 
-## Context Hygiene
+- Frontend uses Next.js 15, React 19, TypeScript, Tailwind CSS, LiveKit, and Supabase.
+- Keep server secrets out of client components and `NEXT_PUBLIC_*` variables.
+- Parse LiveKit tracking packets with `frontend/utils/tracking.ts`; do not cast participant data directly.
+- Preserve responsive layouts, keyboard access, visible focus, and safety announcements.
+- Change schema through a new migration; do not rewrite a migration already applied outside local development.
+- Keep `frontend/utils/supabase/database.types.ts` aligned with schema changes.
+- Environment variables belong in `frontend/.env.local`; never commit credentials.
 
-When Headroom is available, use it for bulky local outputs and context. Do not commit its stores, caches, logs, sessions, learned local files, or machine-specific paths.
+Run frontend checks from `frontend/`:
 
-## Engineering Standards
+```bash
+npm ci
+npm run test
+npm run typecheck
+npm run lint
+npm run build
+npm audit --omit=dev
+```
 
-Follow repository architecture, conventions, formatting, and established patterns.
+## Definition of Done
 
-Prefer simple, focused, testable designs. Avoid duplication, premature abstractions, speculative scaling, unrelated refactors, and behavior changes outside requested scope.
-
-Use clear names, deliberate error handling, named constants for behavior-shaping values, and accurate documentation for public or non-obvious behavior.
-
-Validate work with relevant tests, type checking, linting, builds, or direct inspection. Do not claim success without evidence.
-
-## Resource Hygiene
-
-Close local servers, test servers, background services, and opened ports after verification. Remove temporary artifacts when no longer needed. Do not modify or delete unrelated user files.
-
-## Communication Style
-
-Default to Caveman full. Follow Caveman skill exceptions and user-selected overrides. Keep code, commits, PRs, and documentation professional.
+- Add the smallest regression test covering changed behavior.
+- Run relevant backend and frontend checks from their documented working directories.
+- Keep `git diff --check` clean.
+- Update `README.md`, `.env.example`, and migration/types documentation when contracts change.
+- Do not claim live-camera, LiveKit, Gemini, or Supabase verification without the required devices and credentials.
