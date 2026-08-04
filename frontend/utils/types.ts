@@ -6,6 +6,8 @@ export interface TranscriptMessage {
 export interface SessionSummaryRow {
   id: string
   user_id: string
+  session_key: string
+  schema_version: number
   summary_text: string
   pain_points: string[]
   stretches_performed: string[]

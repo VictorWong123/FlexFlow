@@ -145,7 +145,7 @@ function HomeInner() {
 
         <FadeIn className="mt-7">
           <p className="text-lg text-slate-400 max-w-2xl mx-auto leading-relaxed">
-            Experience real-time form correction and expert guidance.
+            Get real-time movement feedback for supported exercises.
             No appointments. No waiting rooms. Just recovery.
           </p>
         </FadeIn>
@@ -177,15 +177,15 @@ function HomeInner() {
           {[
             {
               label: 'It Sees',
-              text: 'Analyzes joint angles and posture in real-time using your webcam. Every rep, every stretch — tracked with clinical precision.',
+              text: 'Uses webcam pose landmarks to track supported movements after calibration. Results are coaching feedback, not clinical assessment.',
             },
             {
               label: 'It Thinks',
-              text: 'Identifies form errors and provides personalized correction cues instantly. Adaptive feedback that evolves with your movement.',
+              text: 'Uses calibrated pose landmarks to surface deterministic cues for supported movements.',
             },
             {
               label: 'It Guides',
-              text: 'Delivers professional coaching and demonstrations curated for your recovery. A therapist that\u2019s always one step ahead.',
+              text: 'Delivers movement coaching and demonstrations for supported exercises. It does not replace a clinician.',
             },
           ].map((col, i) => (
             <FadeIn key={i}>
@@ -209,8 +209,9 @@ function HomeInner() {
         </FadeIn>
         <FadeIn>
           <p className="text-slate-300 text-lg leading-relaxed">
-            We analyze movement in real-time memory. We never record video,
-            save audio, or store raw transcripts. Your health data is yours alone.
+            Video landmarks are processed in memory and raw video and audio are not
+            stored by FlexFlow. Live media and session text are processed by LiveKit,
+            Google Gemini, and Supabase to provide coaching and saved summaries.
           </p>
         </FadeIn>
       </section>

@@ -1,96 +1,82 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/utils/supabase/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
-import type { TranscriptMessage } from '@/utils/types'
+import { createClient } from '@/utils/supabase/server'
+import { validateSessionInput, validateSummary, type Summary } from '@/utils/session-validation'
 
-const SYSTEM_PROMPT = `You are an expert Physical Therapist. Summarize this session. Return JSON ONLY with keys: "summary_text" (3-4 sentences), "pain_points" (array of strings), "stretches_performed" (array of strings), and "youtube_queries" (3 specific search terms for their issues).`
+const SYSTEM_PROMPT = `Summarize this movement-coaching session. Return JSON only with keys summary_text (3-4 sentences), pain_points (string array), stretches_performed (string array), and youtube_queries (three safe search terms). Do not diagnose.`
+const FALLBACK_SUMMARY: Summary = {
+  summary_text: 'Session completed. Automated summary was unavailable.',
+  pain_points: [],
+  stretches_performed: [],
+  youtube_queries: [],
+}
 
 export async function POST(request: Request) {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    return NextResponse.json({ error: 'Authentication is not configured' }, { status: 503 })
+  }
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  let parsed: unknown
+  try { parsed = await request.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
+  const input = validateSessionInput(parsed)
+  if (!input) return NextResponse.json({ error: 'Invalid session data' }, { status: 400 })
+  const claim = await supabase.rpc('claim_therapy_session', { p_session_id: input.sessionId })
+  if (claim.error) return NextResponse.json({ error: 'Unable to claim session' }, { status: 500 })
+  if (claim.data === 'completed') {
+    const { data: existing } = await supabase.from('session_summaries').select('id').eq('session_key', input.sessionId).maybeSingle()
+    return NextResponse.json({ status: 'ok', reused: true, summary_id: existing?.id ?? null })
   }
-
-  let body: { transcript: TranscriptMessage[]; duration: number }
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
-  }
-
-  const { transcript, duration } = body
-  if (!transcript || !Array.isArray(transcript) || typeof duration !== 'number') {
-    return NextResponse.json({ error: 'Missing transcript or duration' }, { status: 400 })
-  }
-
-  const conversationText = transcript
-    .map((m) => `${m.speaker === 'agent' ? 'Therapist' : 'Patient'}: ${m.text}`)
-    .join('\n')
-
-  console.log(`[save-session] Transcript lines: ${transcript.length}, text length: ${conversationText.length}`)
-
-  if (conversationText.trim().length === 0) {
-    console.warn('[save-session] Empty transcript — skipping Gemini, using fallback')
-  }
-
-  let summaryData: {
-    summary_text: string
-    pain_points: string[]
-    stretches_performed: string[]
-    youtube_queries: string[]
-  }
-
-  try {
-    const apiKey = process.env.GOOGLE_API_KEY
-    if (!apiKey) throw new Error('GOOGLE_API_KEY not set')
-
-    const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash',
-      generationConfig: {
-        responseMimeType: 'application/json',
-      },
-    })
-
-    const result = await model.generateContent(
-      `${SYSTEM_PROMPT}\n\n---\n\n${conversationText}`
-    )
-
-    const text = result.response.text()
-    summaryData = JSON.parse(text)
-  } catch (err) {
-    console.error('Gemini analysis failed:', err)
-    summaryData = {
-      summary_text: 'Session completed. AI summary could not be generated.',
-      pain_points: [],
-      stretches_performed: [],
-      youtube_queries: [],
+  if (claim.data === 'not_found') return NextResponse.json({ error: 'Unknown session' }, { status: 404 })
+  if (claim.data === 'in_progress') return NextResponse.json({ error: 'Summary already in progress' }, { status: 409 })
+  if (claim.data !== 'claimed') return NextResponse.json({ error: 'Session expired' }, { status: 410 })
+  if (input.transcript.length === 0) {
+    const closed = await supabase.rpc('close_therapy_session', { p_session_id: input.sessionId })
+    if (closed.error || !closed.data) {
+      await supabase.rpc('release_therapy_session', { p_session_id: input.sessionId, p_failed: true })
+      return NextResponse.json({ error: 'Failed to close session' }, { status: 500 })
     }
+    return NextResponse.json({ status: 'skipped' })
   }
 
-  const youtubeLinks = (summaryData.youtube_queries || []).map((q: string) => ({
-    label: q,
-    url: `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`,
-  }))
+  const conversation = input.transcript.map(message => `${message.speaker === 'agent' ? 'Coach' : 'User'}: ${message.text}`).join('\n')
+  let summary: Summary
+  let fallback = false
+  try {
+    if (!process.env.GOOGLE_API_KEY) throw new Error('missing provider configuration')
+    const model = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY).getGenerativeModel({
+      model: 'gemini-2.5-flash',
+      generationConfig: { responseMimeType: 'application/json' },
+    })
+    const generated = await model.generateContent(`${SYSTEM_PROMPT}\n\n${conversation}`)
+    const validated = validateSummary(JSON.parse(generated.response.text()))
+    if (!validated) throw new Error('invalid provider response')
+    summary = validated
+  } catch {
+    console.warn('[save-session] summary_provider_failed', { sessionId: input.sessionId })
+    summary = FALLBACK_SUMMARY
+    fallback = true
+  }
 
-  const { error: dbError } = await supabase.from('session_summaries').insert({
-    user_id: user.id,
-    summary_text: summaryData.summary_text,
-    pain_points: summaryData.pain_points || [],
-    stretches_performed: summaryData.stretches_performed || [],
-    youtube_links: youtubeLinks,
-    duration_seconds: Math.round(duration),
+  const youtubeLinks = summary.youtube_queries.map(query => ({
+    label: query,
+    url: `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`,
+  }))
+  const { error } = await supabase.rpc('complete_therapy_session', {
+    p_session_id: input.sessionId,
+    p_summary_text: summary.summary_text,
+    p_pain_points: summary.pain_points,
+    p_stretches_performed: summary.stretches_performed,
+    p_youtube_links: youtubeLinks,
+    p_duration_seconds: Math.round(input.duration),
   })
 
-  if (dbError) {
-    console.error('DB insert error:', dbError)
+  if (error) {
+    console.error('[save-session] database_write_failed', { sessionId: input.sessionId, code: error.code })
+    await supabase.rpc('release_therapy_session', { p_session_id: input.sessionId, p_failed: true })
     return NextResponse.json({ error: 'Failed to save session' }, { status: 500 })
   }
-
-  return NextResponse.json({ status: 'ok' })
+  return NextResponse.json({ status: 'ok', ...(fallback ? { fallback: true } : {}) })
 }

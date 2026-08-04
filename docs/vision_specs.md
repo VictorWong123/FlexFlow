@@ -1,7 +1,7 @@
 # FlexFlow Vision System Specification
 
 ## Overview
-This module (`app/vision.py`) acts as the "eyes" of the AI Physical Therapist. It consumes a real-time LiveKit video track, processes it with MediaPipe Holistic, and updates the shared `AsyncState` with body metrics.
+This module (`app/vision.py`) consumes a LiveKit video track, processes it with MediaPipe Pose, and feeds typed observations to deterministic `SessionCoach` protocols.
 
 ## Architecture
 

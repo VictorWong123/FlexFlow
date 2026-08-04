@@ -1,6 +1,6 @@
 # FlexFlow
 
-Real-time AI Physical Therapist: FastAPI backend + LiveKit Agents + Gemini 2.0 Flash (Multimodal Live API). Vision math uses MediaPipe Holistic; all processing is **in-memory** (no video/audio stored).
+Real-time AI movement coach: FastAPI health service + LiveKit Agents + Gemini Native Audio. MediaPipe Pose owns deterministic movement metrics; raw video/audio are not stored by FlexFlow.
 
 ## Requirements
 
@@ -34,7 +34,8 @@ cp .env.example .env.local
 cd frontend
 npm install
 cp .env.example .env.local
-# Add: NEXT_PUBLIC_LIVEKIT_URL, NEXT_PUBLIC_API_URL
+# Add: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
+# LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET, GOOGLE_API_KEY
 ```
 
 ## Run
@@ -69,9 +70,14 @@ Then open http://localhost:3000
 |------|------|
 | `backend/main.py` | FastAPI app (health, ready) |
 | `backend/app/agent.py` | FlexFlow agent entrypoint; Gemini realtime, `get_body_metrics`, pain guardrail |
-| `backend/app/state.py` | Shared `AsyncState` (whiteboard) |
-| `backend/app/utils/physics.py` | Vision math: neck tilt, elbow flexion |
+| `backend/app/coach.py` | Deterministic `SessionCoach`, movement protocols, rep/hold/cue state |
+| `backend/app/vision.py` | MediaPipe Pose observations and throttled tracking publication |
+| `backend/app/state.py` | Per-session metrics and `SessionCoach` seam |
+| `backend/app/utils/physics.py` | Reusable 3D joint-angle math |
 | `backend/app/pain_guardrail.py` | Pain keywords and safety message |
+| `frontend/app/api/token/route.ts` | Authenticated LiveKit token and session issuance |
+| `frontend/app/api/save-session/route.ts` | Validated, idempotent summary lifecycle |
+| `frontend/supabase/migrations/` | Session registry, summary schema, RLS, and lifecycle RPCs |
 
 ## Why do I need a Gemini API key? Doesn’t LiveKit run the LLM?
 
@@ -85,7 +91,7 @@ So: LiveKit = transport and orchestration; Gemini = the actual LLM/voice. You ne
 
 ## Pain guardrail
 
-When user transcript contains `ouch`, `hurts`, `pain`, or `stop`, call `should_trigger_pain_guardrail(transcript)`; if `True`, clear speech buffer and deliver `get_pain_safety_instruction()` (e.g. via `session.generate_reply(instructions=...)`).
+Interim `stop` or `ouch` input is handled immediately; other pain words are checked on final transcripts. Word-boundary matches interrupt speech, halt tracking, and deliver a fixed warning. Resume requires explicit frontend confirmation.
 
 ## Frontend
 
@@ -97,8 +103,21 @@ npm install
 npm run dev
 ```
 
+## Test
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+python -m pytest -q -p no:cacheprovider
+
+cd ../frontend
+npm ci
+npm run test
+npm run typecheck
+npm run lint
+npm run build
+```
+
 ## Next steps
 
-- Implement backend token endpoint for LiveKit access tokens (frontend needs this to connect)
-- Implement the **adaptive vision loop**: MediaPipe Holistic on user video track, landmarks 0–33, upper-body mode when 25–32 visibility &lt; 0.5, and write neck/arm angles into `AsyncState`.
-- Wire the pain guardrail to the realtime transcript stream.
+- Add protocols only after MediaPipe thresholds and camera-view requirements are validated.

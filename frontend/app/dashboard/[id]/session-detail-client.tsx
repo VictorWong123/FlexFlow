@@ -37,12 +37,12 @@ export default function SessionDetailClient({ session }: { session: SessionSumma
     setDeleting(true)
     try {
       const supabase = createClient()
-      const { error } = await supabase
-        .from('session_summaries')
-        .delete()
-        .eq('id', session.id)
+      const { data: deleted, error } = await supabase.rpc('delete_session_summary', {
+        p_summary_id: session.id,
+      })
 
       if (error) throw error
+      if (!deleted) throw new Error('Session not found')
       router.push('/dashboard')
       router.refresh()
     } catch (err) {

@@ -6,9 +6,12 @@ Holds vision-derived metrics and mode; all processing is in-memory.
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Any
 
 from pydantic import BaseModel, Field, PrivateAttr
+
+from app.coach import Observation, SessionCoach
 
 
 class AsyncState(BaseModel):
@@ -35,6 +38,7 @@ class AsyncState(BaseModel):
     )
 
     _lock: asyncio.Lock = PrivateAttr(default_factory=asyncio.Lock)
+    _coach: SessionCoach = PrivateAttr(default_factory=SessionCoach)
 
     async def update(
         self,
@@ -58,9 +62,30 @@ class AsyncState(BaseModel):
     async def snapshot(self) -> dict[str, Any]:
         """Return a shallow copy of current state for tools (e.g. get_body_metrics)."""
         async with self._lock:
-            return {
+            metrics = {
                 "is_upper_body_only": self.is_upper_body_only,
                 "neck_angle": self.neck_angle,
                 "arm_angles": dict(self.arm_angles),
                 "pointed_body_part": self.pointed_body_part or "(none)",
             }
+            metrics["tracking"] = self._coach.snapshot(time.monotonic_ns() // 1_000_000)
+            return metrics
+
+    async def activate_exercise(self, exercise_name: str) -> dict[str, Any]:
+        async with self._lock:
+            self._coach.activate(exercise_name)
+            return self._coach.snapshot(time.monotonic_ns() // 1_000_000)
+
+    async def observe(self, observation: Observation) -> dict[str, Any]:
+        async with self._lock:
+            return self._coach.observe(observation)
+
+    async def halt_for_safety(self) -> dict[str, Any]:
+        async with self._lock:
+            self._coach.halt()
+            return self._coach.snapshot(time.monotonic_ns() // 1_000_000)
+
+    async def resume_after_safety(self) -> dict[str, Any]:
+        async with self._lock:
+            self._coach.resume()
+            return self._coach.snapshot(time.monotonic_ns() // 1_000_000)

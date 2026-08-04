@@ -6,20 +6,22 @@ No video or audio stored; all processing is in-memory.
 from __future__ import annotations
 
 import os
-from datetime import timedelta
+from pathlib import Path
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from livekit import api
 from pydantic import BaseModel
 
 load_dotenv(".env.local")
 load_dotenv()
 
+_POSE_MODEL_PATH = Path(__file__).parent / "app" / "models" / "pose_landmarker_lite.task"
+
 app = FastAPI(
     title="FlexFlow",
-    description="Real-time AI Physical Therapist backend",
+    description="Real-time AI movement coach backend",
     version="0.1.0",
 )
 
@@ -37,17 +39,6 @@ class HealthResponse(BaseModel):
     service: str
 
 
-class TokenRequest(BaseModel):
-    room_name: str = "flexflow-room"
-    participant_identity: str = "user"
-    participant_name: str | None = None
-
-
-class TokenResponse(BaseModel):
-    server_url: str
-    participant_token: str
-
-
 @app.get("/")
 async def root() -> dict[str, str]:
     return {"message": "FlexFlow backend is running!"}
@@ -60,53 +51,20 @@ async def health() -> HealthResponse:
 
 
 @app.get("/ready", response_model=HealthResponse)
-async def ready() -> HealthResponse:
+async def ready(response: Response) -> HealthResponse:
     """Readiness probe (e.g. after env/API keys loaded)."""
+    required = ("LIVEKIT_API_KEY", "LIVEKIT_API_SECRET", "LIVEKIT_URL", "GOOGLE_API_KEY")
+    livekit_url = os.getenv("LIVEKIT_URL", "")
+    parsed_url = urlparse(livekit_url)
+    if (
+        not all(os.getenv(name) for name in required)
+        or parsed_url.scheme not in {"ws", "wss"}
+        or not parsed_url.netloc
+        or not _POSE_MODEL_PATH.is_file()
+    ):
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return HealthResponse(status="not_ready", service="flexflow")
     return HealthResponse(status="ok", service="flexflow")
-
-
-@app.post("/api/token", response_model=TokenResponse)
-async def get_token(request: TokenRequest) -> TokenResponse:
-    """
-    Generate LiveKit access token for frontend connection.
-    Frontend calls this to get a token before connecting to LiveKit.
-    """
-    api_key = os.getenv("LIVEKIT_API_KEY")
-    api_secret = os.getenv("LIVEKIT_API_SECRET")
-    livekit_url = os.getenv("LIVEKIT_URL")
-
-    if not api_key or not api_secret:
-        raise HTTPException(
-            status_code=500,
-            detail="LIVEKIT_API_KEY and LIVEKIT_API_SECRET must be set",
-        )
-
-    if not livekit_url:
-        raise HTTPException(
-            status_code=500, detail="LIVEKIT_URL must be set"
-        )
-
-    token = api.AccessToken(api_key=api_key, api_secret=api_secret)
-    token.with_identity(request.participant_identity)
-    if request.participant_name:
-        token.with_name(request.participant_name)
-
-    grants = api.VideoGrants(
-        room_join=True,
-        room=request.room_name,
-        can_publish=True,
-        can_subscribe=True,
-    )
-    token.with_grants(grants)
-    token.with_ttl(timedelta(hours=6))
-
-    jwt_token = token.to_jwt()
-
-    server_url = livekit_url.replace("wss://", "https://").replace(
-        "ws://", "http://"
-    )
-
-    return TokenResponse(server_url=server_url, participant_token=jwt_token)
 
 
 if __name__ == "__main__":

@@ -16,6 +16,8 @@ export default function PushToTalk({ isMuted, onToggle }: PushToTalkProps) {
         )}
         <button
           onClick={onToggle}
+          aria-label={isMuted ? 'Unmute microphone' : 'Mute microphone'}
+          aria-pressed={!isMuted}
           className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95 ${
             isMuted
               ? 'bg-slate-800 border-2 border-slate-600'

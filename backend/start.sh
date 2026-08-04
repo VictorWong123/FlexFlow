@@ -1,8 +1,20 @@
 #!/bin/bash
 # Start both the FastAPI health server and the agent worker
 
-# Start FastAPI in the background for healthchecks
-uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} &
+set -eu
 
-# Start the agent worker in the foreground
-python -m app.agent start
+uvicorn main:app --host 0.0.0.0 --port "${PORT:-8000}" &
+health_pid=$!
+agent_pid=""
+
+cleanup() {
+  kill "$agent_pid" 2>/dev/null || true
+  kill "$health_pid" 2>/dev/null || true
+  wait "$agent_pid" 2>/dev/null || true
+  wait "$health_pid" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+python -m app.agent start &
+agent_pid=$!
+wait -n "$health_pid" "$agent_pid"

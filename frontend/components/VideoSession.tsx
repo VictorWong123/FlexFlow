@@ -4,10 +4,10 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Room, RoomEvent, Track } from 'livekit-client'
 import { Camera, LayoutDashboard } from 'lucide-react'
-import { createClient } from '@/utils/supabase/client'
 import ExerciseCard, { ExerciseData } from './ExerciseCard'
 import PushToTalk from './PushToTalk'
 import type { TranscriptMessage } from '@/utils/types'
+import { isSafetyHaltTransition, parseTrackingState, shouldAcceptTrackingUpdate, type TrackingState } from '@/utils/tracking'
 
 interface VideoSessionProps {
   onDisconnect: () => void
@@ -47,6 +47,9 @@ export default function VideoSession({ onDisconnect }: VideoSessionProps) {
   const [transcript, setTranscript] = useState<TranscriptLine[]>([])
   const [elapsed, setElapsed] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
+  const [tracking, setTracking] = useState<TrackingState | null>(null)
+  const [safetyAlert, setSafetyAlert] = useState(false)
+  const [resumeError, setResumeError] = useState<string | null>(null)
 
   const router = useRouter()
   const localVideoRef = useRef<HTMLVideoElement>(null)
@@ -54,6 +57,9 @@ export default function VideoSession({ onDisconnect }: VideoSessionProps) {
   const roomRef = useRef<Room | null>(null)
   const transcriptEndRef = useRef<HTMLDivElement>(null)
   const endingRef = useRef(false)
+  const sessionIdRef = useRef<string | null>(null)
+  const trackingRef = useRef<TrackingState | null>(null)
+  const resumeRequestedRef = useRef(false)
 
   useEffect(() => {
     if (!isConnected) return
@@ -73,12 +79,6 @@ export default function VideoSession({ onDisconnect }: VideoSessionProps) {
       try {
         const tokenResponse = await fetch('/api/token', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            room_name: 'flexflow-room',
-            participant_identity: `user-${Date.now()}`,
-            participant_name: 'FlexFlow User',
-          }),
           signal: abortController.signal,
         })
 
@@ -89,7 +89,8 @@ export default function VideoSession({ onDisconnect }: VideoSessionProps) {
           throw new Error(errorData.detail || `Failed to get token: ${tokenResponse.statusText}`)
         }
 
-        const { server_url, participant_token } = await tokenResponse.json()
+        const { server_url, participant_token, session_id } = await tokenResponse.json()
+        sessionIdRef.current = session_id
         if (cancelled) return
 
         const room = new Room()
@@ -138,6 +139,24 @@ export default function VideoSession({ onDisconnect }: VideoSessionProps) {
             }
             if (topic === 'exercise' && data.title) {
               setExerciseData(data as ExerciseData)
+            }
+            if (topic === 'tracking') {
+              const parsed = parseTrackingState(data)
+              if (parsed) {
+                const previous = trackingRef.current
+                if (!shouldAcceptTrackingUpdate(previous, parsed, resumeRequestedRef.current)) return
+                if (isSafetyHaltTransition(previous, parsed)) {
+                  setSafetyAlert(true)
+                  setResumeError(null)
+                }
+                if (previous?.halted && !parsed.halted) {
+                  resumeRequestedRef.current = false
+                  setSafetyAlert(false)
+                  setResumeError(null)
+                }
+                trackingRef.current = parsed
+                setTracking(parsed)
+              }
             }
           } catch {
           }
@@ -232,7 +251,7 @@ export default function VideoSession({ onDisconnect }: VideoSessionProps) {
       const res = await fetch('/api/save-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript: finalTranscript, duration: elapsed }),
+        body: JSON.stringify({ session_id: sessionIdRef.current, transcript: finalTranscript, duration: elapsed }),
       })
 
       if (res.ok) {
@@ -251,10 +270,20 @@ export default function VideoSession({ onDisconnect }: VideoSessionProps) {
     onDisconnect()
   }, [transcript, elapsed, onDisconnect, router])
 
-  const disconnect = useCallback(() => {
-    if (roomRef.current) roomRef.current.disconnect()
-    onDisconnect()
-  }, [onDisconnect])
+  const resumeAfterSafety = useCallback(async () => {
+    if (!roomRef.current || !window.confirm('Resume only if symptoms have stopped and you feel safe to continue.')) return
+    resumeRequestedRef.current = true
+    setResumeError(null)
+    try {
+      await roomRef.current.localParticipant.publishData(
+        new TextEncoder().encode(JSON.stringify({ type: 'RESUME_AFTER_SAFETY' })),
+        { reliable: true, topic: 'control' },
+      )
+    } catch {
+      resumeRequestedRef.current = false
+      setResumeError('Could not send the resume request. Please try again.')
+    }
+  }, [])
 
   if (error) {
     return (
@@ -284,10 +313,10 @@ export default function VideoSession({ onDisconnect }: VideoSessionProps) {
   }
 
   return (
-    <div className="h-screen bg-slate-950 flex flex-col" spellCheck={false} data-grammarly="false">
+    <div className="min-h-screen lg:h-screen bg-slate-950 flex flex-col" spellCheck={false} data-grammarly="false">
       <audio ref={audioRef} autoPlay />
 
-      <header className="h-20 px-8 flex items-center justify-between shrink-0 border-b border-slate-800">
+      <header className="min-h-20 px-4 sm:px-8 py-3 flex flex-wrap items-center justify-between gap-3 shrink-0 border-b border-slate-800">
         <h1 className="text-2xl font-bold text-slate-50">
           Flex<span className="text-emerald-400">Flow</span>
         </h1>
@@ -296,27 +325,28 @@ export default function VideoSession({ onDisconnect }: VideoSessionProps) {
         </span>
         <div className="flex items-center gap-3">
           <button
+            aria-label="Open dashboard"
             onClick={() => {
               if (roomRef.current) roomRef.current.disconnect()
               router.push('/dashboard')
             }}
-            className="px-4 py-2 bg-slate-800 text-slate-400 rounded-xl border border-slate-700 hover:text-slate-50 hover:bg-slate-700 transition text-sm font-medium flex items-center gap-2"
+            className="px-3 sm:px-4 py-2 bg-slate-800 text-slate-400 rounded-xl border border-slate-700 hover:text-slate-50 hover:bg-slate-700 transition text-sm font-medium flex items-center gap-2"
           >
             <LayoutDashboard className="w-4 h-4" />
-            Dashboard
+            <span className="hidden sm:inline">Dashboard</span>
           </button>
           <button
             onClick={endSession}
             disabled={isSaving}
-            className="px-5 py-2 bg-rose-500/10 text-rose-500 rounded-xl border border-rose-500/30 hover:bg-rose-500/20 transition text-sm font-medium disabled:opacity-50"
+            className="px-3 sm:px-5 py-2 bg-rose-500/10 text-rose-500 rounded-xl border border-rose-500/30 hover:bg-rose-500/20 transition text-xs sm:text-sm font-medium disabled:opacity-50"
           >
-            {isSaving ? 'Generating Summary...' : 'End Session'}
+            {isSaving ? 'Saving...' : 'End Session'}
           </button>
         </div>
       </header>
 
-      <div className="grid grid-cols-12 gap-6 h-[calc(100vh-80px)] p-6 min-h-0">
-        <div className="col-span-8 relative rounded-3xl overflow-hidden bg-slate-900 border border-slate-800 shadow-2xl min-h-0 shrink-0">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 lg:h-[calc(100vh-80px)] p-4 sm:p-6 min-h-0">
+        <div className="lg:col-span-8 relative h-[45vh] lg:h-auto rounded-3xl overflow-hidden bg-slate-900 border border-slate-800 shadow-2xl min-h-0 shrink-0">
           <video
             ref={localVideoRef}
             autoPlay
@@ -332,6 +362,8 @@ export default function VideoSession({ onDisconnect }: VideoSessionProps) {
 
           <button
             onClick={toggleVideo}
+            aria-label={isVideoEnabled ? 'Turn camera off' : 'Turn camera on'}
+            aria-pressed={isVideoEnabled}
             className="absolute bottom-6 right-6 p-3 bg-slate-950/50 backdrop-blur-md rounded-full border border-slate-800 text-slate-400 hover:text-slate-50 transition"
           >
             <Camera className="w-5 h-5" />
@@ -344,7 +376,40 @@ export default function VideoSession({ onDisconnect }: VideoSessionProps) {
           )}
         </div>
 
-        <div className="col-span-4 flex flex-col gap-4 min-h-0 overflow-y-auto h-full">
+        <div className="lg:col-span-4 flex flex-col gap-4 min-h-0 lg:overflow-y-auto lg:h-full">
+          {safetyAlert && (
+            <div role="alert" aria-live="assertive" className="sr-only">
+              Safety stop activated. Stop exercising and review the warning before resuming.
+            </div>
+          )}
+          {tracking && (
+            <div className={`rounded-2xl border p-4 shrink-0 ${tracking.halted ? 'bg-rose-950/40 border-rose-500/40' : 'bg-slate-900 border-slate-800'}`}>
+              <div className="flex items-center justify-between gap-3">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Form tracking</h4>
+                <span className="text-xs text-emerald-400">{tracking.status.replace('_', ' ')}</span>
+              </div>
+              {tracking.tracking_supported ? (
+                <div className="mt-3 flex gap-5 text-sm text-slate-300">
+                  <span>Reps <strong className="text-slate-50">{tracking.reps}</strong></span>
+                  <span>Hold <strong className="text-slate-50">{tracking.hold_seconds}s</strong></span>
+                  {tracking.required_view && <span>View <strong className="text-slate-50">{tracking.required_view}</strong></span>}
+                </div>
+              ) : <p className="mt-2 text-xs text-slate-500">Visual guidance only for this exercise.</p>}
+              {tracking.calibration_required && !tracking.calibrated && !tracking.halted && (
+                <p className="mt-2 text-xs text-sky-300">Hold the start position steady to calibrate.</p>
+              )}
+              {tracking.issues.length > 0 && <p className="mt-2 text-sm text-amber-300">{tracking.issues[0]}</p>}
+              {tracking.cue && !tracking.halted && <p className="mt-2 text-sm text-sky-300">{tracking.cue}</p>}
+              {tracking.halted && (
+                <>
+                  <button onClick={resumeAfterSafety} className="mt-3 w-full rounded-xl bg-rose-500 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-400">
+                    Confirm symptoms stopped and resume
+                  </button>
+                  {resumeError && <p role="status" className="mt-2 text-xs text-rose-300">{resumeError}</p>}
+                </>
+              )}
+            </div>
+          )}
           <div className="bg-slate-900 rounded-2xl border border-slate-800 p-4 shrink-0">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-3">
               Live Transcript

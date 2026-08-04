@@ -1,6 +1,6 @@
 # FlexFlow Frontend
 
-Next.js frontend for FlexFlow AI Physical Therapist. Built with React, TypeScript, and Tailwind CSS.
+Next.js frontend for FlexFlow AI movement coach. Built with React, TypeScript, and Tailwind CSS.
 
 ## Setup
 

@@ -16,6 +16,9 @@ export interface ExerciseData {
   target?: string
   equipment?: string
   instructions?: string[]
+  canonical_id?: string | null
+  tracking_supported?: boolean
+  required_view?: 'front' | 'side' | null
 }
 
 interface ExerciseCardProps {
@@ -72,6 +75,7 @@ export default function ExerciseCard({ data, onClose }: ExerciseCardProps) {
             </div>
             <button
               onClick={onClose}
+              aria-label="Close exercise guide"
               className="text-slate-500 hover:text-slate-300 transition shrink-0 ml-2"
             >
               <XCircle className="w-5 h-5" />

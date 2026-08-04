@@ -22,13 +22,14 @@ import httpx
 
 logger = logging.getLogger("flexflow.exercise_db")
 
+_EXERCISE_DB_REVISION = "b0eed061e1c832b3ed815fbaa4b45b3cdc14df49"
 _EXERCISES_URL = (
     "https://raw.githubusercontent.com/yuhonas/free-exercise-db"
-    "/main/dist/exercises.json"
+    f"/{_EXERCISE_DB_REVISION}/dist/exercises.json"
 )
 _IMAGE_BASE = (
     "https://raw.githubusercontent.com/yuhonas/free-exercise-db"
-    "/main/exercises"
+    f"/{_EXERCISE_DB_REVISION}/exercises"
 )
 
 _cache: list[dict[str, Any]] | None = None
