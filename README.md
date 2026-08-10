@@ -118,6 +118,48 @@ npm run lint
 npm run build
 ```
 
+Backend pytest blocks all outbound sockets, including when `.env.local` contains real
+credentials. Provider smoke checks are manual-only and require two confirmations:
+`--confirm-live` plus `FLEXFLOW_RUN_LIVE_SMOKE=1`.
+
+### Low-cost live status check
+
+Start backend HTTP service first, then run from `backend/`:
+
+```powershell
+$env:FLEXFLOW_RUN_LIVE_SMOKE = "1"
+python -m app.scripts.smoke_backend status --confirm-live --backend-url http://127.0.0.1:8000
+```
+
+Expected compact JSON reports `/health`, `/ready`, and LiveKit control plane as `ok`.
+Budget: exactly 2 backend HTTP requests, 1 LiveKit `list_rooms` request, 0 rooms, and
+0 Gemini sessions. Command performs no retry.
+
+### Full headless smoke
+
+Run manually from `backend/`; backend worker must not already be running for this room:
+
+```powershell
+$env:FLEXFLOW_RUN_LIVE_SMOKE = "1"
+python -m app.scripts.smoke_backend headless --confirm-live
+```
+
+Command first generates local offline audio saying `stop`, trying Windows SAPI and then the
+`ffmpeg` `flite` filter when no usable SAPI voice exists. It never uses network TTS. Only
+after local synthesis succeeds, it launches one worker, creates one UUID room through RTC named dispatch, publishes blank
+in-memory RGB frames and ephemeral synthetic audio, and checks agent join, Gemini greeting
+audio, tracking, safety halt, and explicit resume. Received audio is consumed in memory and
+never played. Raw media, landmarks, transcripts, URLs, and credentials are not printed or
+persisted. Hard deadlines and zero retries cap use at 1 Gemini realtime session. Headless
+mode makes 0 `list_rooms` calls and 1 cleanup `delete_room` request; room, worker process
+tree, and temporary WAV cleanup is attempted on success or failure. A cleanup failure makes
+an otherwise successful smoke report fail.
+
+A green headless result proves current service connectivity, named dispatch, media/data
+transport, Gemini audio output, and halt/resume plumbing. It does not prove body-specific
+pose accuracy, camera angle/lighting quality, resume authorization, or proactive Gemini
+consumption of every tracking transition. Real camera validation remains separate.
+
 ## Next steps
 
 - Add protocols only after MediaPipe thresholds and camera-view requirements are validated.

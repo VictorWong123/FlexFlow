@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import json
+import time
 from types import SimpleNamespace
 import pytest
 
@@ -12,6 +15,7 @@ from app.state import AsyncState
 from app.utils.physics import angle_degrees_3d
 from app.vision import extract_pose_metrics
 from app import vision
+from app.agent import FlexFlowAgent
 
 
 def observe(timestamp_ms: int, value: float, *, view: str = "side", confidence: float = 0.9, issues: tuple[str, ...] = ()) -> Observation:
@@ -196,6 +200,115 @@ def test_synthetic_landmarks_produce_metric_visibility_and_side_view() -> None:
     assert result["visibility"]["knee_flexion"] == 0.9
     assert "knee_flexion" in result["metrics"]
     assert round(angle_degrees_3d((1, 0, 0), (0, 0, 0), (0, 1, 0))) == 90
+
+
+def test_landmark_extraction_bounds_front_upper_covered_and_pointing() -> None:
+    with pytest.raises(ValueError, match="33"):
+        extract_pose_metrics([Landmark()] * 32)
+
+    covered = [Landmark(visibility=0.0) for _ in range(33)]
+    assert extract_pose_metrics(covered) == {"camera_covered": True}
+
+    front = [Landmark() for _ in range(33)]
+    for index in range(25, 33):
+        front[index].visibility = 0.2
+    front[19] = Landmark(front[11].x, front[11].y, visibility=0.9)
+    result = extract_pose_metrics(front)
+    assert result["view"] == "front"
+    assert result["is_upper_body_only"] is True
+    assert result["pointed_body_part"] == "Left Shoulder"
+    assert len(result["landmarks"]) == 33
+    assert all(set(item) == {"x", "y", "z", "v"} for item in result["landmarks"])
+
+
+def test_gemini_metrics_tool_returns_same_tracking_snapshot_as_session_coach() -> None:
+    async def check() -> None:
+        state = AsyncState()
+        await state.activate_exercise("squat")
+        timestamp = time.monotonic_ns() // 1_000_000
+        latest = await state.observe(Observation(
+            timestamp_ms=timestamp,
+            confidence=0.9,
+            metrics={"knee_flexion": 170.0},
+            visibility={"knee_flexion": 0.9},
+            view="side",
+        ))
+        room = SimpleNamespace(local_participant=SimpleNamespace())
+        agent = FlexFlowAgent(state, room)
+        metrics = await FlexFlowAgent.get_body_metrics._func(agent, None)  # type: ignore[arg-type]
+        assert metrics["tracking"] == latest
+
+    asyncio.run(check())
+
+
+def test_vision_manager_fake_stream_updates_state_and_publishes_packet(monkeypatch) -> None:
+    class Participant:
+        def __init__(self) -> None:
+            self.packets: list[tuple[str, bytes]] = []
+
+        async def publish_data(self, payload: bytes, *, topic: str, **_kwargs: object) -> None:
+            self.packets.append((topic, payload))
+
+    class Frame:
+        width = 2
+        height = 2
+        data = bytes(12)
+
+    class Stream:
+        def __init__(self, _track: object, **_kwargs: object) -> None:
+            pass
+
+        def __aiter__(self):
+            async def events():
+                yield SimpleNamespace(frame=Frame(), timestamp_us=1_000)
+            return events()
+
+    async def check() -> None:
+        state = AsyncState()
+        await state.activate_exercise("squat")
+        participant = Participant()
+        manager = object.__new__(vision.VisionManager)
+        manager._track = object()
+        manager._state = state
+        manager._local_participant = participant
+        manager._running = False
+        manager._closed = False
+        manager._executor = ThreadPoolExecutor(max_workers=1)
+        manager._landmarker = SimpleNamespace(close=lambda: None)
+        manager._neck_buf = deque(maxlen=5)
+        manager._left_elbow_buf = deque(maxlen=5)
+        manager._right_elbow_buf = deque(maxlen=5)
+        manager._last_publish = 0.0
+        manager._last_tracking_publish = 0.0
+        manager._last_tracking_payload = None
+        manager._last_tracking_state = None
+
+        def process(_rgb: object, _timestamp: int) -> dict[str, object]:
+            manager._running = False
+            return {
+                "is_upper_body_only": False,
+                "neck_angle": 0.0,
+                "left_elbow": 170.0,
+                "right_elbow": 170.0,
+                "pointed_body_part": "",
+                "confidence": 0.9,
+                "view": "side",
+                "metrics": {"knee_flexion": 170.0},
+                "visibility": {"knee_flexion": 0.9},
+                "landmarks": [],
+            }
+
+        manager._process_frame_sync = process
+        fake_rtc = SimpleNamespace(VideoStream=Stream, VideoBufferType=SimpleNamespace(RGB24=1))
+        monkeypatch.setattr(vision, "rtc", fake_rtc)
+        await manager.run()
+        tracking_packets = [json.loads(payload) for topic, payload in participant.packets if topic == "tracking"]
+        assert tracking_packets
+        assert any(packet["protocol_id"] == "squat" for packet in tracking_packets)
+        snapshot = await state.snapshot()
+        assert snapshot["arm_angles"] == {"left_elbow": 170.0, "right_elbow": 170.0}
+
+    asyncio.run(check())
 
 
 def test_tracking_publish_caps_ordinary_updates_and_bypasses_for_reps(monkeypatch) -> None:
